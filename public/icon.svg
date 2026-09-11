@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="50%" stop-color="#022c22" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#14b8a6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  <rect x="8" y="8" width="496" height="496" rx="120" stroke="url(#emeraldGrad)" stroke-width="6" stroke-opacity="0.3" fill="none" />
+
+  <!-- Central AI Code Core -->
+  <g filter="url(#glow)">
+    <!-- Circuit Lines -->
+    <path d="M120 256 L180 256 M332 256 L392 256" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-dasharray="8 8" />
+    <circle cx="120" cy="256" r="10" fill="#34d399" />
+    <circle cx="392" cy="256" r="10" fill="#34d399" />
+    <circle cx="256" cy="120" r="10" fill="#38bdf8" />
+    <path d="M256 120 L256 170" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+    <circle cx="256" cy="392" r="10" fill="#14b8a6" />
+    <path d="M256 342 L256 392" stroke="#14b8a6" stroke-width="6" stroke-linecap="round" />
+
+    <!-- Left Bracket < -->
+    <path d="M195 180 L135 256 L195 332" stroke="url(#emeraldGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Slash / -->
+    <path d="M278 160 L234 352" stroke="url(#accentGrad)" stroke-width="24" stroke-linecap="round" />
+
+    <!-- Right Bracket > -->
+    <path d="M317 180 L377 256 L317 332" stroke="url(#emeraldGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <!-- Academic Badge Dot -->
+  <circle cx="256" cy="256" r="8" fill="#ffffff" />
+</svg>

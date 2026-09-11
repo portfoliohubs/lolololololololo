@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered student or admin user profile in parmaga platform",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user identifier"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Triple full name of the student"
+        },
+        "email": {
+          "type": "string",
+          "description": "Student email address"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Student or guardian phone number"
+        },
+        "governorate": {
+          "type": "string",
+          "description": "One of the 27 Egyptian governorates"
+        },
+        "activeDeviceId": {
+          "type": "string",
+          "description": "Unique hardware/browser fingerprint of active linked device"
+        },
+        "deviceLinkedAt": {
+          "type": "string",
+          "description": "ISO timestamp when device was linked"
+        },
+        "hasConsentedWatermark": {
+          "type": "boolean",
+          "description": "Whether student has accepted legal watermark consent"
+        },
+        "consentDate": {
+          "type": "string",
+          "description": "ISO timestamp of watermark legal consent agreement"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "Access role in the platform"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["uid", "fullName", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Student profile, device lock fingerprint, and legal consent data"
+    }
+  }
+}

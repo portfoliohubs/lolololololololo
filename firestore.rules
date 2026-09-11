@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'cources01@gmail.com'
+      );
+    }
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Admins registry
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Users Collection (Student profiles, single device lock, legal consent)
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /exams/{examId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+    // Packages Collection
+    match /packages/{packageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // SEO Articles Collection
+    match /seo_articles/{articleId} {
+      allow read: if resource.data.isPublished == true || isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

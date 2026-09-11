@@ -1,0 +1,6 @@
+{
+  "name": "منصة برمجتكم",
+  "description": "منصة برمجتكم 2026 - 2027: البوابة الرائدة لطلاب الثانوية وعلوم البيانات وهندسة الذكاء الاصطناعي في مصر",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
