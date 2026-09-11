@@ -11,11 +11,25 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'guest';
+    }
+
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == 'cources01@gmail.com'
+        getUserRole() == 'admin'
       );
+    }
+
+    function isAssistant() {
+      return isSignedIn() && getUserRole() == 'assistant';
+    }
+
+    function isStaff() {
+      return isAdmin() || isAssistant();
     }
 
     // Default deny all
@@ -34,17 +48,72 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Users Collection (Student profiles, single device lock, legal consent)
+    // Immutable Audit Logs collection
+    match /audit_logs/{logId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && request.resource.data.executorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Users Collection (Strict Role-Based & Field-Level Security)
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isStaff();
+      
+      // Allow registration: student profile must start inactive, cannot forge admin/assistant role
+      allow create: if isOwner(userId) && (
+        !('role' in request.resource.data) || request.resource.data.role == 'student'
+      ) && (
+        !('subscriptionStatus' in request.resource.data) || request.resource.data.subscriptionStatus == 'inactive'
+      ) && (
+        !('unlockedUnits' in request.resource.data) || request.resource.data.unlockedUnits.size() == 0
+      ) && (
+        !('suspended' in request.resource.data) || request.resource.data.suspended == false
+      );
+
+      // Restrict updates:
+      // Staff has permission to modify fields.
+      // Non-staff owner CANNOT modify sensitive fields:
+      // role, subscriptionStatus, packageId, subscriptionExpiresAt, unlockedUnits, suspended.
+      // Device can only be bound if previously null/empty.
+      allow update: if isStaff() || (
+        isOwner(userId) &&
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('subscriptionStatus' in request.resource.data) || request.resource.data.subscriptionStatus == resource.data.subscriptionStatus) &&
+        (!('packageId' in request.resource.data) || request.resource.data.packageId == resource.data.packageId) &&
+        (!('subscriptionExpiresAt' in request.resource.data) || request.resource.data.subscriptionExpiresAt == resource.data.subscriptionExpiresAt) &&
+        (!('unlockedUnits' in request.resource.data) || request.resource.data.unlockedUnits == resource.data.unlockedUnits) &&
+        (!('suspended' in request.resource.data) || request.resource.data.suspended == resource.data.suspended) &&
+        (
+          !('activeDeviceId' in resource.data) || 
+          resource.data.activeDeviceId == null || 
+          resource.data.activeDeviceId == '' ||
+          request.resource.data.activeDeviceId == resource.data.activeDeviceId
+        )
+      );
+
       allow delete: if isAdmin();
 
+      // Student exams subcollection
       match /exams/{examId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if isOwner(userId) || isStaff();
       }
     }
+
+    // Settings Collection (lesson videos, global platform config)
+    match /settings/lesson_videos {
+      allow read: if isStaff() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscriptionStatus == 'active'
+      );
+      allow write: if isStaff();
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+
     // Packages Collection
     match /packages/{packageId} {
       allow read: if true;
@@ -53,8 +122,8 @@ service cloud.firestore {
 
     // SEO Articles Collection
     match /seo_articles/{articleId} {
-      allow read: if resource.data.isPublished == true || isAdmin();
-      allow write: if isAdmin();
+      allow read: if resource.data.isPublished == true || isStaff();
+      allow write: if isStaff();
     }
   }
 }

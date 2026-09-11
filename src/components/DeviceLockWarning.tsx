@@ -26,13 +26,11 @@ export const DeviceLockWarning: React.FC = () => {
 
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [showAdminKeyInput, setShowAdminKeyInput] = useState(false);
-  const [adminKey, setAdminKey] = useState('');
   const [adminError, setAdminError] = useState<string | null>(null);
 
   const handleAdminReset = async () => {
-    // If current user is platform admin or entered admin authorization
-    if (userProfile?.role === 'admin' || userProfile?.email === 'cources01@gmail.com' || adminKey === 'parmaga_admin_2026') {
+    // Verified platform administrators and assistants only
+    if (userProfile?.role === 'admin' || userProfile?.role === 'assistant' || userProfile?.email === 'cources01@gmail.com') {
       setIsResetting(true);
       setAdminError(null);
       try {
@@ -47,7 +45,7 @@ export const DeviceLockWarning: React.FC = () => {
         setIsResetting(false);
       }
     } else {
-      setAdminError('رمز تصريح الإدارة غير صحيح.');
+      setAdminError('يتطلب هذا الإجراء صلاحيات مشرف معتمد.');
     }
   };
 

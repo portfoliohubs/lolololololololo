@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ExamEngine } from './ExamEngine';
-import { ArrowRight, Trophy, Clock, Star, PlayCircle, Loader2 } from 'lucide-react';
+import { ArrowRight, Trophy, Clock, Star, PlayCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { contentService } from '../services/contentService';
 
 interface MockExam {
   id: string;
@@ -16,17 +17,17 @@ interface MockExam {
 export const FinalExamsHub: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [exams, setExams] = useState<MockExam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedExamIndex, setSelectedExamIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchExams = async () => {
       try {
-        const res = await fetch('/content/final_reviews_and_exams/final_mock_exams.json');
-        if (!res.ok) throw new Error('Exams not found');
-        const data = await res.json();
+        setError(null);
+        const data = await contentService.getFinalMockExams();
         setExams(data);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        setError(err.message || 'تعذر تحميل الامتحانات الشاملة.');
       } finally {
         setLoading(false);
       }
@@ -51,6 +52,26 @@ export const FinalExamsHub: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       <div className="flex flex-col items-center justify-center p-20 space-y-4">
         <Loader2 className="w-12 h-12 animate-spin text-amber-500" />
         <p className="text-slate-400 font-semibold animate-pulse">جاري سحب الامتحانات الوزارية...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-5">
+        <div className="p-4 rounded-2xl bg-amber-950/80 border border-amber-500/40 text-amber-200 flex items-center gap-3 text-right">
+          <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+          <div>
+            <div className="font-bold text-white mb-1">تعذر الوصول للامتحانات الشاملة</div>
+            <div className="text-xs">{error}</div>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-semibold text-xs cursor-pointer"
+        >
+          العودة للمحطات التعليمية
+        </button>
       </div>
     );
   }

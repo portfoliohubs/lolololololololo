@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, RotateCcw, ThumbsUp, ArrowRight, CheckCircle2, RotateCw } from 'lucide-react';
 import { useContentProtection } from '../hooks/useContentProtection';
-
-interface Flashcard {
-  id: string;
-  front: string;
-  back: string;
-  hint?: string;
-  category?: string;
-}
+import { normalizeFlashcardDeck, NormalizedFlashcard } from '../lib/contentNormalizer';
+import { contentService } from '../services/contentService';
 
 interface FlashcardsEngineProps {
   lessonId: string;
@@ -17,7 +11,7 @@ interface FlashcardsEngineProps {
 
 export const FlashcardsEngine: React.FC<FlashcardsEngineProps> = ({ lessonId, onClose }) => {
   useContentProtection(true);
-  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [cards, setCards] = useState<NormalizedFlashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,12 +23,12 @@ export const FlashcardsEngine: React.FC<FlashcardsEngineProps> = ({ lessonId, on
     const fetchCards = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/content/lessons/${lessonId}/flashcards.json`);
-        if (!res.ok) throw new Error('Flashcards not found');
-        const data = await res.json();
-        setCards(data);
-      } catch (err) {
-        setError('تعذر تحميل بطاقات الذاكرة. قد لا تكون متوفرة لهذا الدرس بعد.');
+        setError(null);
+        const data = await contentService.getLessonFlashcards(lessonId);
+        const normalized = normalizeFlashcardDeck(data);
+        setCards(normalized);
+      } catch (err: any) {
+        setError(err.message || 'تعذر تحميل بطاقات الذاكرة. قد لا تكون متوفرة لهذا الدرس بعد.');
       } finally {
         setLoading(false);
       }

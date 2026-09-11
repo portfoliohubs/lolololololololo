@@ -2,7 +2,7 @@ const DB_NAME = 'ParmagaExamsDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'exam_state';
 
-interface ExamState {
+export interface ExamState {
   id: string; // "userId_lessonId"
   lessonId: string;
   userId: string;
@@ -10,6 +10,8 @@ interface ExamState {
   lastQuestionIndex: number;
   completed: boolean;
   score?: number;
+  remainingSeconds?: number;
+  totalSeconds?: number;
   updatedAt: number;
 }
 

@@ -1,4 +1,5 @@
 export type UserRole = 'student' | 'admin' | 'assistant';
+export type SubscriptionStatus = 'inactive' | 'active' | 'expired' | 'suspended';
 
 export interface UserProfile {
   uid: string;
@@ -10,15 +11,63 @@ export interface UserProfile {
   deviceLinkedAt?: string;
   hasConsentedWatermark?: boolean;
   consentDate?: string;
-  role?: UserRole;
-  unlockedUnits?: number[];
+  role: UserRole;
+  subscriptionStatus: SubscriptionStatus;
+  packageId?: string;
+  subscriptionExpiresAt?: string;
+  unlockedUnits: number[];
   unlockedLessons?: string[];
-  activePackageId?: string;
-  packageStatus?: 'active' | 'pending' | 'locked';
-  isSuspended?: boolean;
+  suspended: boolean;
+  isSuspended?: boolean; // legacy alias
+  activePackageId?: string; // legacy alias
+  packageStatus?: 'active' | 'pending' | 'locked'; // legacy alias
   code?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AdminCommandResult {
+  ok: boolean;
+  userId?: string;
+  updatedFields?: Partial<UserProfile>;
+  updatedAt?: string;
+  code?: string;
+  message?: string;
+  docFields?: any;
+}
+
+export interface AuditLogEntry {
+  id?: string;
+  executorUid: string;
+  executorEmail?: string;
+  executorRole: UserRole;
+  targetUserId: string;
+  targetUserEmail?: string;
+  action: string;
+  newValuesJson?: string;
+  previousValues?: Record<string, any>;
+  newValues?: Record<string, any>;
+  timestamp: string;
+  reason?: string;
+}
+
+export interface NormalizedQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  answerIndex: number;
+  explanation: string;
+  ministerialRef?: string;
+  difficulty?: string;
+  concept?: string;
+}
+
+export interface NormalizedFlashcard {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string;
+  category?: string;
 }
 
 export interface LessonMeta {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getFirestore, collection, getDocs, updateDoc, doc, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { 
   Search, 
   Filter, 
@@ -16,9 +16,12 @@ import {
   Unlock,
   Calendar,
   Layers,
-  Save
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import { SUBSCRIPTION_PACKAGES } from '../../data/curriculumData';
+import { adminService } from '../../services/adminService';
+import type { SubscriptionStatus } from '../../types';
 
 interface Student {
   uid: string;
@@ -28,20 +31,21 @@ interface Student {
   governorate?: string;
   activeDeviceId?: string;
   role: string;
-  unlockedUnits?: string[];
+  subscriptionStatus?: SubscriptionStatus;
+  unlockedUnits?: number[];
   packageId?: string;
   subscriptionExpiresAt?: string;
-  isBanned?: boolean;
+  suspended?: boolean;
 }
 
 const ALL_UNITS = [
-  { id: 'unit-1', name: 'الوحدة 1: هرم المعرفة DIKW وتحديات البيانات' },
-  { id: 'unit-2', name: 'الوحدة 2: الأمن السيبراني والتشفير الحديث' },
-  { id: 'unit-3', name: 'الوحدة 3: هياكل البيانات الخوارزمية وتصميم الأنظمة' },
-  { id: 'unit-4', name: 'الوحدة 4: تعلم الآلة (ML) والتحليل التنبئي' },
-  { id: 'unit-5', name: 'الوحدة 5: الرؤية الحاسوبية ومعالجة الصور' },
-  { id: 'unit-6', name: 'الوحدة 6: معالجة اللغات الطبيعية (NLP)' },
-  { id: 'unit-7', name: 'الوحدة 7: نماذج اللغة الكبيرة (LLM) والذكاء التوليدي' },
+  { num: 1, name: 'الوحدة 1: هرم المعرفة DIKW وتحديات البيانات' },
+  { num: 2, name: 'الوحدة 2: الأمن السيبراني والتشفير الحديث' },
+  { num: 3, name: 'الوحدة 3: هياكل البيانات الخوارزمية وتصميم الأنظمة' },
+  { num: 4, name: 'الوحدة 4: تعلم الآلة (ML) والتحليل التنبئي' },
+  { num: 5, name: 'الوحدة 5: الرؤية الحاسوبية ومعالجة الصور' },
+  { num: 6, name: 'الوحدة 6: معالجة اللغات الطبيعية (NLP)' },
+  { num: 7, name: 'الوحدة 7: نماذج اللغة الكبيرة (LLM) والذكاء التوليدي' },
 ];
 
 export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant = false }) => {
@@ -52,10 +56,12 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
   
   // Edit modal state
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [editUnits, setEditUnits] = useState<string[]>([]);
+  const [editUnits, setEditUnits] = useState<number[]>([]);
+  const [editStatus, setEditStatus] = useState<SubscriptionStatus>('active');
   const [editPackageId, setEditPackageId] = useState<string>('full_curriculum');
   const [editExpiresAt, setEditExpiresAt] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
@@ -66,10 +72,27 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
       setLoading(true);
       const db = getFirestore();
       const snap = await getDocs(collection(db, 'users'));
-      const data = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Student));
+      const data = snap.docs.map(doc => {
+        const raw = doc.data();
+        let normalizedUnits: number[] = [];
+        if (Array.isArray(raw.unlockedUnits)) {
+          normalizedUnits = raw.unlockedUnits.map((u: any) => {
+            if (typeof u === 'number') return u;
+            const parsed = parseInt(String(u).replace(/\D/g, ''), 10);
+            return isNaN(parsed) ? 1 : parsed;
+          });
+        }
+        return { 
+          uid: doc.id, 
+          ...raw,
+          unlockedUnits: normalizedUnits,
+          subscriptionStatus: raw.subscriptionStatus || (raw.packageId ? 'active' : 'inactive')
+        } as Student;
+      });
       setStudents(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setActionError(err.message || 'تعذر تحميل بيانات الطلاب.');
     } finally {
       setLoading(false);
     }
@@ -98,16 +121,12 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
   const handleSingleResetDevice = async (student: Student) => {
     if (!window.confirm(`هل أنت متأكد من فك ارتباط الجهاز للطالب: ${student.fullName}؟`)) return;
     try {
-      const db = getFirestore();
-      await updateDoc(doc(db, 'users', student.uid), {
-        activeDeviceId: null,
-        deviceLinkedAt: null
-      });
-      setStudents(students.map(s => s.uid === student.uid ? { ...s, activeDeviceId: undefined } : s));
+      await adminService.resetDevice(student.uid, 'Reset requested by Admin');
+      await fetchStudents();
       alert(`تم فك ارتباط الجهاز للطالب ${student.fullName} بنجاح.`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('حدث خطأ أثناء فك الارتباط.');
+      alert(`حدث خطأ أثناء فك الارتباط: ${err.message}`);
     }
   };
 
@@ -116,64 +135,75 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
     if (!window.confirm(`هل أنت متأكد من فك ارتباط الجهاز لـ (${selectedIds.size}) طالب؟`)) return;
 
     try {
-      const db = getFirestore();
-      const batch = writeBatch(db);
-      selectedIds.forEach(uid => {
-        batch.update(doc(db, 'users', uid), { activeDeviceId: null, deviceLinkedAt: null });
-      });
-      await batch.commit();
-      
-      setStudents(students.map(s => selectedIds.has(s.uid) ? { ...s, activeDeviceId: undefined } : s));
+      for (const uid of Array.from(selectedIds)) {
+        await adminService.resetDevice(uid, 'Bulk reset by Admin');
+      }
       setSelectedIds(new Set());
+      await fetchStudents();
       alert('تم فك ارتباط الأجهزة بنجاح.');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('حدث خطأ.');
+      alert(`حدث خطأ أثناء العملية: ${err.message}`);
+    }
+  };
+
+  const handleToggleSuspend = async (student: Student) => {
+    const isSuspended = student.suspended || student.subscriptionStatus === 'suspended';
+    const confirmMsg = isSuspended 
+      ? `هل تريد إلغاء تجميد حساب الطالب: ${student.fullName}؟`
+      : `هل تريد تجميد حساب الطالب: ${student.fullName} وحظره من المنصة؟`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      if (isSuspended) {
+        await adminService.reactivateStudent(student.uid, 'Reactivated by admin');
+      } else {
+        await adminService.suspendStudent(student.uid, 'Suspended by admin');
+      }
+      await fetchStudents();
+      alert('تم تحديث حالة الحساب بنجاح.');
+    } catch (err: any) {
+      alert(`تعذر تغيير حالة الطالب: ${err.message}`);
     }
   };
 
   const openEditModal = (student: Student) => {
     setEditingStudent(student);
-    setEditUnits(student.unlockedUnits || ['unit-1']);
+    setEditUnits(student.unlockedUnits && student.unlockedUnits.length > 0 ? student.unlockedUnits : [1]);
+    setEditStatus(student.subscriptionStatus || 'active');
     setEditPackageId(student.packageId || 'full_curriculum');
     setEditExpiresAt(student.subscriptionExpiresAt || '2027-07-01');
   };
 
-  const toggleEditUnit = (unitId: string) => {
-    if (editUnits.includes(unitId)) {
-      setEditUnits(editUnits.filter(u => u !== unitId));
+  const toggleEditUnit = (unitNum: number) => {
+    if (editUnits.includes(unitNum)) {
+      setEditUnits(editUnits.filter(u => u !== unitNum));
     } else {
-      setEditUnits([...editUnits, unitId]);
+      setEditUnits([...editUnits, unitNum]);
     }
   };
 
   const unlockAllUnits = () => {
-    setEditUnits(ALL_UNITS.map(u => u.id));
+    setEditUnits([1, 2, 3, 4, 5, 6, 7]);
   };
 
   const handleSaveStudentEdit = async () => {
     if (!editingStudent) return;
     setSavingEdit(true);
     try {
-      const db = getFirestore();
-      await updateDoc(doc(db, 'users', editingStudent.uid), {
+      await adminService.updateStudentSubscription(editingStudent.uid, {
         unlockedUnits: editUnits,
+        subscriptionStatus: editStatus,
         packageId: editPackageId,
         subscriptionExpiresAt: editExpiresAt,
       });
 
-      setStudents(students.map(s => s.uid === editingStudent.uid ? {
-        ...s,
-        unlockedUnits: editUnits,
-        packageId: editPackageId,
-        subscriptionExpiresAt: editExpiresAt
-      } : s));
-
+      await fetchStudents();
       setEditingStudent(null);
-      alert('تم تحديث صلاحيات ووحدات الطالب بنجاح.');
-    } catch (err) {
+      alert('تم تحديث صلاحيات ووحدات الطالب وحفظ التغييرات بنجاح.');
+    } catch (err: any) {
       console.error(err);
-      alert('حدث خطأ أثناء حفظ التعديلات.');
+      alert(`حدث خطأ أثناء حفظ التعديلات: ${err.message}`);
     } finally {
       setSavingEdit(false);
     }
@@ -185,11 +215,11 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
       : filteredStudents;
 
     let csv = '\uFEFF'; // BOM for Arabic support in Excel
-    csv += 'الاسم الكامل,البريد الإلكتروني,رقم الهاتف,المحافظة,حالة الجهاز,الباقة,تاريخ الانتهاء,الوحدات المفتوحة\n';
+    csv += 'الاسم الكامل,البريد الإلكتروني,رقم الهاتف,المحافظة,حالة الجهاز,حالة الاشتراك,الباقة,تاريخ الانتهاء,الوحدات المفتوحة\n';
     
     listToExport.forEach(s => {
       const unitsStr = (s.unlockedUnits || []).join(' | ');
-      csv += `"${s.fullName}","${s.email}","${s.phone || ''}","${s.governorate || ''}","${s.activeDeviceId ? 'مقفل' : 'حر'}","${s.packageId || 'المنهج الكامل'}","${s.subscriptionExpiresAt || '2027-07-01'}","${unitsStr}"\n`;
+      csv += `"${s.fullName}","${s.email}","${s.phone || ''}","${s.governorate || ''}","${s.activeDeviceId ? 'مقفل' : 'حر'}","${s.subscriptionStatus || 'inactive'}","${s.packageId || 'المنهج الكامل'}","${s.subscriptionExpiresAt || '2027-07-01'}","${unitsStr}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -203,7 +233,7 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
   };
 
   if (loading) {
-    return <div className="text-white p-10">جارٍ تحميل بيانات الطلاب...</div>;
+    return <div className="text-white p-10 font-semibold">جارٍ تحميل بيانات الطلاب المعتمدة...</div>;
   }
 
   return (
@@ -250,78 +280,113 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
                 <th className="p-4 font-bold">الطالب</th>
                 <th className="p-4 font-bold">التواصل</th>
                 <th className="p-4 font-bold">المحافظة</th>
+                <th className="p-4 font-bold text-center">حالة الاشتراك</th>
                 <th className="p-4 font-bold text-center">حالة الجهاز</th>
                 <th className="p-4 font-bold text-center">الوحدات والباقة</th>
                 <th className="p-4 font-bold text-center">إجراءات التحكم</th>
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map(student => (
-                <tr key={student.uid} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${selectedIds.has(student.uid) ? 'bg-amber-500/5' : ''}`}>
-                  <td className="p-4">
-                    <button onClick={() => toggleSelection(student.uid)} className="text-slate-500 hover:text-amber-500 transition-colors">
-                      {selectedIds.has(student.uid) ? (
-                        <CheckSquare className="w-5 h-5 text-amber-500" />
-                      ) : (
-                        <Square className="w-5 h-5" />
-                      )}
-                    </button>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-bold text-white">{student.fullName}</div>
-                    <div className="text-[11px] text-slate-500 font-mono mt-0.5">{student.uid.slice(0, 10)}...</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="text-slate-300 text-xs">{student.email}</div>
-                    <div className="text-slate-500 text-xs mt-0.5 font-mono" dir="ltr">{student.phone || '---'}</div>
-                  </td>
-                  <td className="p-4">
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-semibold">{student.governorate || '---'}</span>
-                  </td>
-                  <td className="p-4 text-center">
-                    {student.activeDeviceId ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 text-xs font-bold border border-rose-500/20">
-                        <Smartphone className="w-3.5 h-3.5" /> مقفل بجهاز
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
-                        جهاز حر
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
-                    <div className="text-xs text-amber-400 font-bold">
-                      {student.unlockedUnits?.length ? `${student.unlockedUnits.length} وحدات مفعلة` : 'المنهج كاملاً'}
-                    </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
-                      ينتهي: {student.subscriptionExpiresAt || '2027-07-01'}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(student)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
-                        title="تعديل الوحدات والباقة"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-amber-400" />
-                        <span>الوحدات</span>
-                      </button>
+              {filteredStudents.map(student => {
+                const isSuspended = student.suspended || student.subscriptionStatus === 'suspended';
+                const isActive = student.subscriptionStatus === 'active' && !student.suspended;
 
-                      <button
-                        type="button"
-                        onClick={() => handleSingleResetDevice(student)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
-                        title="إعادة تعيين قفل الجهاز بنقرة واحدة"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>فك الجهاز</span>
+                return (
+                  <tr key={student.uid} className={`border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors ${selectedIds.has(student.uid) ? 'bg-amber-500/5' : ''}`}>
+                    <td className="p-4">
+                      <button onClick={() => toggleSelection(student.uid)} className="text-slate-500 hover:text-amber-500 transition-colors">
+                        {selectedIds.has(student.uid) ? (
+                          <CheckSquare className="w-5 h-5 text-amber-500" />
+                        ) : (
+                          <Square className="w-5 h-5" />
+                        )}
                       </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-bold text-white">{student.fullName}</div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">{student.uid.slice(0, 10)}...</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="text-slate-300 text-xs">{student.email}</div>
+                      <div className="text-slate-500 text-xs mt-0.5 font-mono" dir="ltr">{student.phone || '---'}</div>
+                    </td>
+                    <td className="p-4">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-semibold">{student.governorate || '---'}</span>
+                    </td>
+                    <td className="p-4 text-center">
+                      {isSuspended ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30">
+                          مجمد / محظور
+                        </span>
+                      ) : isActive ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                          نشط
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 text-xs font-semibold border border-slate-700">
+                          غير نشط
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      {student.activeDeviceId ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 text-xs font-bold border border-rose-500/20">
+                          <Smartphone className="w-3.5 h-3.5" /> مقفل بجهاز
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                          جهاز حر
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="text-xs text-amber-400 font-bold">
+                        {student.unlockedUnits?.length ? `${student.unlockedUnits.length} وحدات مفعلة (${student.unlockedUnits.join(', ')})` : 'لا توجد وحدات'}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        ينتهي: {student.subscriptionExpiresAt || '2027-07-01'}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(student)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="تعديل الوحدات والباقة"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>تعديل</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSingleResetDevice(student)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="إعادة تعيين قفل الجهاز بنقرة واحدة"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>فك الجهاز</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSuspend(student)}
+                          className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                            isSuspended 
+                              ? 'bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30'
+                          }`}
+                          title={isSuspended ? "إلغاء التجميد" : "تجميد الحساب"}
+                        >
+                          {isSuspended ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> : <ShieldBan className="w-3.5 h-3.5 text-rose-400" />}
+                          <span>{isSuspended ? 'تفعيل' : 'تجميد'}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               
               {filteredStudents.length === 0 && (
                 <tr>
@@ -382,8 +447,22 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
               </button>
             </div>
 
-            {/* Package & Expiry */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Package & Expiry & Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">حالة الاشتراك</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as SubscriptionStatus)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500"
+                >
+                  <option value="active">نشط (Active)</option>
+                  <option value="inactive">غير نشط (Inactive)</option>
+                  <option value="suspended">مجمد / محظور (Suspended)</option>
+                  <option value="expired">منتهي (Expired)</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">نوع الباقة</label>
                 <select
@@ -425,12 +504,12 @@ export const AdminStudents: React.FC<{ isAssistant?: boolean }> = ({ isAssistant
 
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {ALL_UNITS.map(u => {
-                  const isChecked = editUnits.includes(u.id);
+                  const isChecked = editUnits.includes(u.num);
                   return (
                     <button
-                      key={u.id}
+                      key={u.num}
                       type="button"
-                      onClick={() => toggleEditUnit(u.id)}
+                      onClick={() => toggleEditUnit(u.num)}
                       className={`w-full p-3 rounded-xl border flex items-center justify-between text-right text-xs font-semibold transition-colors ${
                         isChecked
                           ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300'

@@ -151,7 +151,7 @@ export const SecurityAuditPanel: React.FC<SecurityAuditPanelProps> = ({ onClose 
           </div>
 
           <div className="text-[11px] text-slate-500">
-            وفق القانون المصري رقم 82 لسنة 2002 ورقم 175 لسنة 2018
+            حماية معتمدة لحقوق المحتوى والملكية الرقمية
           </div>
         </div>
       </div>

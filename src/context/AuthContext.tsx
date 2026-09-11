@@ -107,6 +107,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeDeviceId: '',
           hasConsentedWatermark: false,
           role: firebaseUser.email === 'cources01@gmail.com' ? 'admin' : 'student',
+          subscriptionStatus: 'inactive',
+          unlockedUnits: [],
+          suspended: false,
           createdAt: now,
           updatedAt: now,
         };
@@ -122,6 +125,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
       return;
     }
+
+    // Ensure unlockedUnits is always number[]
+    if (Array.isArray(profileData.unlockedUnits)) {
+      profileData.unlockedUnits = profileData.unlockedUnits.map(u => {
+        if (typeof u === 'number') return u;
+        const parsed = parseInt(String(u).replace(/\D/g, ''), 10);
+        return isNaN(parsed) ? null : parsed;
+      }).filter((n): n is number => n !== null);
+    } else {
+      profileData.unlockedUnits = [];
+    }
+
+    // Normalize subscriptionStatus and suspended
+    profileData.subscriptionStatus = profileData.subscriptionStatus || 'inactive';
+    profileData.suspended = Boolean(profileData.suspended || profileData.isSuspended);
 
     const currentDeviceId = simulatedDiffDevice 
       ? `SIM-SECOND-DEVICE-${Math.random().toString(36).substring(2, 7).toUpperCase()}`
@@ -246,6 +264,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deviceLinkedAt: now,
       hasConsentedWatermark: false,
       role: cleanEmail === 'cources01@gmail.com' ? 'admin' : 'student',
+      subscriptionStatus: 'inactive',
+      unlockedUnits: [],
+      suspended: false,
       createdAt: now,
       updatedAt: now,
     };
